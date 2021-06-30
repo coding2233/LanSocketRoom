@@ -19,7 +19,7 @@ namespace wanderer.lan
 
         public static LanRoom Lan { get; private set; }
 
-        public static void Run(IFrameSyncEvent frameSyncEvent, int port=35981)
+        public static void Run(IFrameSyncEvent frameSyncEvent, int port=1099)
         {
             var lanSocket = new LanSocket(port);
             Lan = new LanRoom(lanSocket,frameSyncEvent);

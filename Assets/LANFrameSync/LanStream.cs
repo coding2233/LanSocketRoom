@@ -42,6 +42,8 @@ namespace wanderer.lan
         public void Flush()
         {
             _buffer.Flush();
+            _buffer.SetLength(0);
+            SetSeekOrigin(SeekOrigin.Begin);
         }
 
         public void SetSeekOrigin(SeekOrigin seekOrigin)

@@ -48,7 +48,7 @@ namespace wanderer.lan
 
         #region master
         public int LogicFrame { get; private set; }
-        private bool _inGame;
+        public bool InGame { get; private set; }
         private readonly Dictionary<int, byte[]> _inputData = new Dictionary<int, byte[]>();
         #endregion
 
@@ -90,11 +90,12 @@ namespace wanderer.lan
             //_frameSyncEvent.OnJoinedRoom(RoomId, Master);
         }
 
-        public void RunGame()
+        public void RunGame(MonoBehaviour runGameObject)
         {
-            if (InRoom && RoomMaster)
+            if (InRoom && RoomMaster && !InGame)
             {
-                new Task(MasterFrameLogic).Start();
+                runGameObject.StartCoroutine(MasterFrameLogic());
+                //new Task(MasterFrameLogic).Start();
             }
         }
 
@@ -129,7 +130,7 @@ namespace wanderer.lan
         {
             if (RoomMaster)
             {
-                _inGame = false;
+                InGame = false;
 
                 foreach (var item in UserList.Values)
                 {
@@ -170,7 +171,8 @@ namespace wanderer.lan
 
         private void OnReceive(byte[] buffer, IPEndPoint remoteIPEndPoint)
         {
-            _receiveStream.SetSeekOrigin(SeekOrigin.End);
+            _receiveStream.Flush();
+            //_receiveStream.SetSeekOrigin(SeekOrigin.End);
             _receiveStream.Writer.Write(buffer,0, buffer.Length);
             if (_receiveStream.Length >= 4)
             {
@@ -209,13 +211,11 @@ namespace wanderer.lan
                         {
                             int roomId = _receiveStream.Reader.ReadInt32();
                             int userId = _receiveStream.Reader.ReadInt32();
-                            int port = _receiveStream.Reader.ReadInt32();
-                            byte[] addressBuffer = _receiveStream.Reader.ReadBytes((int)_receiveStream.Length);
-                            IPAddress address = new IPAddress(addressBuffer);
-                            IPEndPoint newIPEndPoint = new IPEndPoint(address, port);
+                            byte[] ipendpointBuffer = _receiveStream.Reader.ReadBytes((int)_receiveStream.Length);
+                            IPEndPoint newIPEndPoint = ipendpointBuffer.ToLanString().ToIPEndPoint();
                             if (RoomMaster)
                             {
-
+                                
                             }
                             else
                             {
@@ -228,6 +228,7 @@ namespace wanderer.lan
                                 }
                             }
                             _frameSyncEvent.OnUserJoinedRoom(roomId, userId, newIPEndPoint);
+                            
                         }
                         break;
                     case LanRoomKey.Level_Room:
@@ -271,7 +272,7 @@ namespace wanderer.lan
                         {
                             if (RoomMaster)
                             {
-                                if (_inGame)
+                                if (InGame)
                                 {
                                     int userId = _receiveStream.Reader.ReadInt32();
                                     byte[] inputBuffer = _receiveStream.Reader.ReadBytes((int)_receiveStream.Length);
@@ -290,7 +291,7 @@ namespace wanderer.lan
                             {
                                 LogicFrame = logicFrame;
                             }
-                            while (_receiveStream.Length > 0)
+                            if (_receiveStream.Length > 8)
                             {
                                 int userId = _receiveStream.Reader.ReadInt32();
                                 int size = _receiveStream.Reader.ReadInt32();
@@ -303,7 +304,6 @@ namespace wanderer.lan
                         break;
                 }
             }
-            _receiveStream.Flush();
         }
 
 
@@ -315,67 +315,71 @@ namespace wanderer.lan
                 _sendStream.Writer.Write((int)LanRoomKey.Room_New_User);
                 _sendStream.Writer.Write(RoomId);
                 _sendStream.Writer.Write(item.Key);
-                _sendStream.Writer.Write(item.Value.Port);
-                _sendStream.Writer.Write(item.Value.Address.GetAddressBytes());
+                _sendStream.Writer.Write(item.Value.ToString().ToBytes());
                 _sendStream.SetSeekOrigin(SeekOrigin.Begin);
                 _lanSocket.Send(_sendStream.Reader.ReadBytes((int)_sendStream.Length), endPoint);
             }
 
             int userId= endPoint.GetHashCode();
             UserList.Add(userId,endPoint);
+            _sendStream.Flush();
+            _sendStream.Writer.Write((int)LanRoomKey.Room_New_User);
+            _sendStream.Writer.Write(RoomId);
+            _sendStream.Writer.Write(userId);
+            _sendStream.Writer.Write(endPoint.ToString().ToBytes());
+            MasterSendToAll();
+        }
+
+        private void MasterSendToAll()
+        {
+            _sendStream.SetSeekOrigin(SeekOrigin.Begin);
+            byte[] sendBuffer = _sendStream.Reader.ReadBytes((int)_sendStream.Length);
             foreach (var item in UserList.Values)
             {
-                _sendStream.Flush();
-                _sendStream.Writer.Write((int)LanRoomKey.Room_New_User);
-                _sendStream.Writer.Write(RoomId);
-                _sendStream.Writer.Write(userId);
-                _sendStream.Writer.Write(endPoint.Port);
-                _sendStream.Writer.Write(endPoint.Address.GetAddressBytes());
-                _sendStream.SetSeekOrigin(SeekOrigin.Begin);
-                byte[] sendBuffer = _sendStream.Reader.ReadBytes((int)_sendStream.Length);
                 _lanSocket.Send(sendBuffer, item);
             }
         }
 
 
-        private void MasterFrameLogic()
+        private IEnumerator MasterFrameLogic()
         {
-            _inGame = true;
+            InGame = true;
             LogicFrame = 0;
             float lastTime = Time.realtimeSinceStartup;
+
             float logicTime = 1.0f / 15.0f;
+
             _inputData.Clear();
             while (InRoom&& RoomMaster)
             {
                 lastTime = Time.realtimeSinceStartup - lastTime;
                 if (lastTime >= logicTime)
                 {
-                    lock (_inputData)
+                    if (_inputData.Count > 0)
                     {
-                        _sendStream.Flush();
-                        _sendStream.Writer.Write((int)LanRoomKey.Game_Input_Logic);
-                        _sendStream.Writer.Write(LogicFrame);
                         foreach (var item in _inputData)
                         {
+                            _sendStream.Flush();
+                            _sendStream.Writer.Write((int)LanRoomKey.Game_Input_Logic);
+                            _sendStream.Writer.Write(LogicFrame);
                             _sendStream.Writer.Write(item.Key);
                             _sendStream.Writer.Write(item.Value.Length);
                             _sendStream.Writer.Write(item.Value);
+                            _sendStream.SetSeekOrigin(SeekOrigin.Begin);
+                            byte[] sendBuffer = _sendStream.Reader.ReadBytes((int)_sendStream.Length);
+                            foreach (var user in UserList.Values)
+                            {
+                                _lanSocket.Send(sendBuffer, user);
+                            }
                         }
-                        _sendStream.SetSeekOrigin(SeekOrigin.Begin);
-                        byte[] sendBuffer = _sendStream.Reader.ReadBytes((int)_sendStream.Length);
-                        foreach (var item in UserList.Values)
-                        {
-                            _lanSocket.Send(sendBuffer, item);
-                        }
-
                         _inputData.Clear();
                     }
-
+                    lastTime = Time.realtimeSinceStartup;
                     LogicFrame++;
                 }
-                lastTime = Time.realtimeSinceStartup;
+                yield return new WaitForEndOfFrame();
             }
-            _inGame = false;
+            InGame = false;
         }
 
 

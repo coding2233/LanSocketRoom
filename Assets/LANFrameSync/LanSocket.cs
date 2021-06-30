@@ -22,8 +22,8 @@ namespace wanderer.lan
         {
             get
             {
-                //return new IPEndPoint(IPAddress.Any, _port);
-                return _udp.Client.LocalEndPoint as IPEndPoint;
+                return new IPEndPoint(IPAddress.Parse("127.0.0.1"), _port);
+                //return _udp.Client.LocalEndPoint as IPEndPoint;
             }
         }
 
@@ -38,9 +38,9 @@ namespace wanderer.lan
             try
             {
                 _port = port;
-                _udp = new UdpClient();
+                _udp = new UdpClient(port);
                 _udp.EnableBroadcast = true;
-                _udp.Client.Bind(new IPEndPoint(IPAddress.Parse("192.168.0.112"), port));
+                //_udp.Client.Bind(new IPEndPoint(IPAddress.Parse("192.168.0.112"), port));
                 _broadcastIPEndPoint = new IPEndPoint(IPAddress.Broadcast, port);
 
                 //Task for receive.
@@ -66,13 +66,15 @@ namespace wanderer.lan
                 Debug.LogWarning("Sending data is null.");
                 return;
             }
-            SocketFlags flag = SocketFlags.None;
+            //SocketFlags flag = SocketFlags.None;
             if (remote == null)
             {
                 remote = _broadcastIPEndPoint;
-                flag = SocketFlags.Broadcast;
+                //flag = SocketFlags.Broadcast;
             }
-            
+
+            Debug.Log($"Send size: {buffer.Length}  remote ipendpoint: {remote.ToString()} key: {BitConverter.ToInt32(buffer, 0)}");
+
             _udp.Send(buffer, buffer.Length, remote);
             //_udp.Client.SendTo(buffer, buffer.Length, flag, remote);
         }
@@ -87,6 +89,7 @@ namespace wanderer.lan
                 _mainSynchronizationContext.Post((obj)=> {
                     if (buffer != null&& buffer.Length>0)
                     {
+                        Debug.Log($"Receive size: {buffer.Length}  remote ipendpoint: {remoteEP.ToString()} key: {BitConverter.ToInt32(buffer,0)}");
                         OnMainReceive?.Invoke(buffer, remoteEP);
                     }
                 }, buffer);

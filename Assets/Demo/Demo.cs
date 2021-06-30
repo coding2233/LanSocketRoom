@@ -2,6 +2,8 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Net;
+using System.Net.Sockets;
+using System.Threading.Tasks;
 using UnityEngine;
 
 namespace wanderer.lan
@@ -21,6 +23,20 @@ namespace wanderer.lan
         void Start()
         {
             LANFrameSync.Run(this);
+            //UdpClient uc = new UdpClient(1099);
+
+            //new Task(()=> {
+            //    IPEndPoint remote=null;
+            //    while (true)
+            //    {
+            //        byte[] buffer= uc.Receive(ref remote);
+            //        Debug.Log($"{buffer.Length}   {remote.ToString()}");
+            //    }
+            //}).Start();
+
+            //uc.Send(BitConverter.GetBytes(100), 4, new IPEndPoint(IPAddress.Parse("127.0.0.1"), 1099));
+
+
         }
 
         private void OnDestroy()
@@ -93,25 +109,35 @@ namespace wanderer.lan
                     GUILayout.Label($" [Is Master: {LANFrameSync.Lan.RoomMaster}] ");
                     GUILayout.Label($" [Frame: {LANFrameSync.Lan.LogicFrame}] ");
 
-                    if (GUILayout.Button("KeyCode.W"))
+                    if (LANFrameSync.Lan.RoomMaster && !LANFrameSync.Lan.InGame)
                     {
-                        byte[] buffer = BitConverter.GetBytes((int)KeyCode.W);
-                        OnGameInput.Invoke(buffer);
+                        if (GUILayout.Button("Game Start"))
+                        {
+                            LANFrameSync.Lan.RunGame(this);
+                        }
                     }
-                    if (GUILayout.Button("KeyCode.A"))
+                    else
                     {
-                        byte[] buffer = BitConverter.GetBytes((int)KeyCode.A);
-                        OnGameInput.Invoke(buffer);
-                    }
-                    if (GUILayout.Button("KeyCode.S"))
-                    {
-                        byte[] buffer = BitConverter.GetBytes((int)KeyCode.S);
-                        OnGameInput.Invoke(buffer);
-                    }
-                    if (GUILayout.Button("KeyCode.D"))
-                    {
-                        byte[] buffer = BitConverter.GetBytes((int)KeyCode.D);
-                        OnGameInput.Invoke(buffer);
+                        if (GUILayout.Button("KeyCode.W"))
+                        {
+                            byte[] buffer = BitConverter.GetBytes((int)KeyCode.W);
+                            OnGameInput.Invoke(buffer);
+                        }
+                        if (GUILayout.Button("KeyCode.A"))
+                        {
+                            byte[] buffer = BitConverter.GetBytes((int)KeyCode.A);
+                            OnGameInput.Invoke(buffer);
+                        }
+                        if (GUILayout.Button("KeyCode.S"))
+                        {
+                            byte[] buffer = BitConverter.GetBytes((int)KeyCode.S);
+                            OnGameInput.Invoke(buffer);
+                        }
+                        if (GUILayout.Button("KeyCode.D"))
+                        {
+                            byte[] buffer = BitConverter.GetBytes((int)KeyCode.D);
+                            OnGameInput.Invoke(buffer);
+                        }
                     }
                 }
             }
